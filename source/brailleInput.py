@@ -2,7 +2,7 @@
 #A part of NonVisual Desktop Access (NVDA)
 #This file is covered by the GNU General Public License.
 #See the file COPYING for more details.
-#Copyright (C) 2012-2013 NV Access Limited, Rui Batista
+#Copyright (C) 2012-2015 NV Access Limited, Rui Batista
 
 import os.path
 import louis
@@ -35,18 +35,36 @@ class BrailleInputHandler(object):
 	"""Handles braille input.
 	"""
 
+	def __init__(self):
+		self.bufferBraille = []
+		self.bufferText = u""
+
 	def input(self, dots):
 		"""Handle one cell of braille input.
 		"""
+		# Maintain a buffer so that state set by previous cells can be handled;
+		# e.g. capital and number signs.
+		oldTextLen = len(self.bufferText)
+		self.bufferBraille.append(dots)
+
+		# Translate the buffer.
 		# liblouis requires us to set the highest bit for proper use of dotsIO.
-		char = unichr(dots | 0x8000)
-		text = louis.backTranslate(
+		data = u"".join([unichr(cell | 0x8000) for cell in self.bufferBraille])
+		self.bufferText = louis.backTranslate(
 			[os.path.join(braille.TABLES_DIR, config.conf["braille"]["inputTable"]),
 			"braille-patterns.cti"],
-			char, mode=louis.dotsIO)
-		chars = text[0]
-		if len(chars) > 0:
-			self.sendChars(chars)
+			data, mode=louis.dotsIO)[0]
+
+		newText = self.bufferText[oldTextLen:]
+		if newText:
+			self.sendChars(newText)
+
+		if self.bufferBraille[-1] == 0: # Space
+			self.flushBuffer()
+
+	def flushBuffer(self):
+		self.bufferBraille = []
+		self.bufferText = u""
 
 	def sendChars(self, chars):
 		inputs = []

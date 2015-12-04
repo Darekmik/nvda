@@ -11,12 +11,17 @@ import config
 from logHandler import log
 import winUser
 import inputCore
+import speech
+import keyboardHandler
+import inputCore
 
 """Framework for handling braille input from the user.
 All braille input is represented by a {BrailleInputGesture}.
 Normally, all that is required is to create and execute a L{BrailleInputGesture},
 as there are built-in gesture bindings for braille input.
 """
+
+DOT7 = 64
 
 #: The singleton BrailleInputHandler instance.
 #: @type: L{BrailleInputHandler}
@@ -38,10 +43,16 @@ class BrailleInputHandler(object):
 	def __init__(self):
 		self.bufferBraille = []
 		self.bufferText = u""
+		#: Indexes of cells which produced text.
+		#: For example, this includes letters and numbers, but not number signs,
+		#: since a number sign by itself doesn't produce text.
+		self.cellsWithText = set()
 
 	def input(self, dots):
 		"""Handle one cell of braille input.
 		"""
+		if dots == DOT7:
+			return self.eraseLastCell()
 		# Maintain a buffer so that state set by previous cells can be handled;
 		# e.g. capital and number signs.
 		oldTextLen = len(self.bufferText)
@@ -58,13 +69,28 @@ class BrailleInputHandler(object):
 		newText = self.bufferText[oldTextLen:]
 		if newText:
 			self.sendChars(newText)
+			self.cellsWithText.add(len(self.bufferBraille) - 1)
 
 		if self.bufferBraille[-1] == 0: # Space
 			self.flushBuffer()
 
+	def eraseLastCell(self):
+		if not self.bufferBraille:
+			return
+		index = len(self.bufferBraille) - 1
+		cell = self.bufferBraille.pop()
+		if index in self.cellsWithText:
+			inputCore.manager.emulateGesture(keyboardHandler.KeyboardInputGesture.fromName("backspace"))
+			self.cellsWithText.remove(index)
+		else:
+			# This cell didn't produce text, so just remove the cell from the buffer.
+			# Translators: Reported when braille dots are removed.
+			speech.speakMessage(_("dot") + " " + formatDotNumbers(cell))
+
 	def flushBuffer(self):
 		self.bufferBraille = []
 		self.bufferText = u""
+		self.lastCellsWithText.clear()
 
 	def sendChars(self, chars):
 		inputs = []
@@ -77,6 +103,13 @@ class BrailleInputHandler(object):
 				input.ii.ki.dwFlags = winUser.KEYEVENTF_UNICODE|direction
 				inputs.append(input)
 		winUser.SendInput(inputs)
+
+def formatDotNumbers(dots):
+	out = []
+	for dot in xrange(8):
+		if dots & (1 << dot):
+			out.append(str(dot + 1))
+	return " ".join(out)
 
 class BrailleInputGesture(inputCore.InputGesture):
 	"""Input (dots and/or space bar) from a braille keyboard.
@@ -106,18 +139,16 @@ class BrailleInputGesture(inputCore.InputGesture):
 		if not self.dots and not self.space:
 			return None
 		# Translators: Reported before braille input in input help mode.
-		out = [_("braille")]
+		out = _("braille") + " "
 		if self.space and self.dots:
 			# Translators: Reported when braille space is pressed with dots in input help mode.
-			out.append(_("space with dot"))
+			out += _("space with dot")
 		elif self.dots:
 			# Translators: Reported when braille dots are pressed in input help mode.
-			out.append(_("dot"))
+			out += _("dot")
 		elif self.space:
 			# Translators: Reported when braille space is pressed in input help mode.
-			out.append(_("space"))
+			out += _("space")
 		if self.dots:
-			for dot in xrange(8):
-				if self.dots & (1 << dot):
-					out.append(str(dot + 1))
-		return " ".join(out)
+			out += " " + formatDotNumbers(self.dots)
+		return out

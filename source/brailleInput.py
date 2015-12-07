@@ -39,6 +39,7 @@ class BrailleInputHandler(object):
 	"""
 
 	def __init__(self):
+		self.isContracted = False
 		self.bufferBraille = []
 		self.bufferText = u""
 		#: Indexes of cells which produced text.
@@ -54,22 +55,24 @@ class BrailleInputHandler(object):
 		oldTextLen = len(self.bufferText)
 		self.bufferBraille.append(dots)
 
-		# Translate the buffer.
-		# liblouis requires us to set the highest bit for proper use of dotsIO.
-		data = u"".join([unichr(cell | 0x8000) for cell in self.bufferBraille])
-		self.bufferText = louis.backTranslate(
-			[os.path.join(braille.TABLES_DIR, config.conf["braille"]["inputTable"]),
-			"braille-patterns.cti"],
-			data, mode=louis.dotsIO)[0]
-
-		newText = self.bufferText[oldTextLen:]
-		if newText:
-			self.sendChars(newText)
-			self.cellsWithText.add(len(self.bufferBraille) - 1)
+		if not self.isContracted or dots == 0:
+			# Translate the buffer.
+			# liblouis requires us to set the highest bit for proper use of dotsIO.
+			data = u"".join([unichr(cell | 0x8000) for cell in self.bufferBraille])
+			self.bufferText = louis.backTranslate(
+				[os.path.join(braille.TABLES_DIR, config.conf["braille"]["inputTable"]),
+				"braille-patterns.cti"],
+				data, mode=louis.dotsIO)[0]
+			newText = self.bufferText[oldTextLen:]
+			if newText:
+				self.sendChars(newText)
+				self.cellsWithText.add(len(self.bufferBraille) - 1)
+			elif config.conf["keyboard"]["speakTypedCharacters"]:
+				reportDots(dots)
 		elif config.conf["keyboard"]["speakTypedCharacters"]:
 			reportDots(dots)
 
-		if self.bufferBraille[-1] == 0: # Space
+		if dots == 0: # Space
 			self.flushBuffer()
 
 	def eraseLastCell(self):

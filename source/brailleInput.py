@@ -21,8 +21,6 @@ Normally, all that is required is to create and execute a L{BrailleInputGesture}
 as there are built-in gesture bindings for braille input.
 """
 
-DOT7 = 64
-
 #: The singleton BrailleInputHandler instance.
 #: @type: L{BrailleInputHandler}
 handler = None
@@ -51,8 +49,6 @@ class BrailleInputHandler(object):
 	def input(self, dots):
 		"""Handle one cell of braille input.
 		"""
-		if dots == DOT7:
-			return self.eraseLastCell()
 		# Maintain a buffer so that state set by previous cells can be handled;
 		# e.g. capital and number signs.
 		oldTextLen = len(self.bufferText)
@@ -70,12 +66,15 @@ class BrailleInputHandler(object):
 		if newText:
 			self.sendChars(newText)
 			self.cellsWithText.add(len(self.bufferBraille) - 1)
+		elif config.conf["keyboard"]["speakTypedCharacters"]:
+			reportDots(dots)
 
 		if self.bufferBraille[-1] == 0: # Space
 			self.flushBuffer()
 
 	def eraseLastCell(self):
 		if not self.bufferBraille:
+			inputCore.manager.emulateGesture(keyboardHandler.KeyboardInputGesture.fromName("backspace"))
 			return
 		index = len(self.bufferBraille) - 1
 		cell = self.bufferBraille.pop()
@@ -83,14 +82,13 @@ class BrailleInputHandler(object):
 			inputCore.manager.emulateGesture(keyboardHandler.KeyboardInputGesture.fromName("backspace"))
 			self.cellsWithText.remove(index)
 		else:
-			# This cell didn't produce text, so just remove the cell from the buffer.
-			# Translators: Reported when braille dots are removed.
-			speech.speakMessage(_("dot") + " " + formatDotNumbers(cell))
+			# This cell didn't produce text.
+			reportDots(cell)
 
 	def flushBuffer(self):
 		self.bufferBraille = []
 		self.bufferText = u""
-		self.lastCellsWithText.clear()
+		self.cellsWithText.clear()
 
 	def sendChars(self, chars):
 		inputs = []
@@ -111,6 +109,10 @@ def formatDotNumbers(dots):
 			out.append(str(dot + 1))
 	return " ".join(out)
 
+def reportDots(dots):
+	# Translators: Used when reporting braille dots to the user.
+	speech.speakMessage(_("dot") + " " + formatDotNumbers(dots))
+
 class BrailleInputGesture(inputCore.InputGesture):
 	"""Input (dots and/or space bar) from a braille keyboard.
 	This could either be as part of a braille display or a stand-alone unit.
@@ -125,11 +127,17 @@ class BrailleInputGesture(inputCore.InputGesture):
 	#: @type: bool
 	space = False
 
+	def _makeDotsId(self):
+		return "+".join("dot%d" % (i+1) for i in xrange(8) if self.dots & (1 << i))
+
 	def _get_identifiers(self):
 		if self.space and self.dots:
-			dotsString = "+".join("dot%d" % (i+1) for i in xrange(8) if self.dots & (1 << i))
-			return ("bk:space+%s" % dotsString,
+			return ("bk:space+%s" % self._makeDotsId(),
 				"bk:space+dots")
+		elif self.dots in (braille.DOT7, braille.DOT8):
+			# Allow bindings to dots 7 or 8 by themselves.
+			return ("bk:" + self._makeDotsId(),
+				"bk:dots")
 		elif self.dots or self.space:
 			return ("bk:dots",)
 		else:

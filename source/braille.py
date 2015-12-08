@@ -810,8 +810,8 @@ class TextInfoRegion(Region):
 			typeform |= louis.underline
 		return typeform
 
-	def _addFieldText(self, text, contentPos):
-		if self.rawText:
+	def _addFieldText(self, text, contentPos, separate=True):
+		if separate and self.rawText:
 			# Separate this field text from the rest of the text.
 			text = " " + text
 		self.rawText += text
@@ -939,6 +939,11 @@ class TextInfoRegion(Region):
 		chunk.collapse()
 		chunk.setEndPoint(sel, "endToStart")
 		self._addTextWithFields(chunk, formatConfig)
+		# If the user is entering braille, place it before the selection.
+		import brailleInput
+		text = brailleInput.handler.composedBraille
+		if text:
+			self._addFieldText(text, None, separate=False)
 		# Now, the selection itself.
 		self._addTextWithFields(sel, formatConfig, isSelection=True)
 		# Finally, get the chunk from the end of the selection to the end of the reading unit.

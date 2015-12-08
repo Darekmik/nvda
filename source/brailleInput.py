@@ -46,6 +46,7 @@ class BrailleInputHandler(object):
 		#: For example, this includes letters and numbers, but not number signs,
 		#: since a number sign by itself doesn't produce text.
 		self.cellsWithText = set()
+		self.composedBraille = ""
 
 	def input(self, dots):
 		"""Handle one cell of braille input.
@@ -69,14 +70,26 @@ class BrailleInputHandler(object):
 					speech._suppressSpeakTypedCharacters = (len(newText), time.time())
 				else:
 					self.cellsWithText.add(len(self.bufferBraille) - 1)
+					self.composedBraille = ""
 				self.sendChars(newText)
-			elif config.conf["keyboard"]["speakTypedCharacters"]:
-				reportDots(dots)
-		elif config.conf["keyboard"]["speakTypedCharacters"]:
-			reportDots(dots)
+			else:
+				self._reportNonText(dots)
+		else:
+			self._reportNonText(dots)
 
 		if dots == 0: # Space
 			self.flushBuffer()
+
+	def _reportNonText(self, dots):
+		if  config.conf["keyboard"]["speakTypedCharacters"]:
+			speakDots(dots)
+		self.composedBraille += unichr(0x2800 + dots)
+		self._updateComposed()
+
+	def _updateComposed(self):
+		region = braille.handler.mainBuffer.regions[-1] if braille.handler.mainBuffer.regions else None
+		if isinstance(region, braille.TextInfoRegion):
+			braille.handler._doCursorMove(region)
 
 	def eraseLastCell(self):
 		if not self.bufferBraille:
@@ -89,12 +102,18 @@ class BrailleInputHandler(object):
 			self.cellsWithText.remove(index)
 		else:
 			# This cell didn't produce text.
-			reportDots(cell)
+			speakDots(cell)
+			self.composedBraille = self.composedBraille[:-1]
+			self._updateComposed()
 
 	def flushBuffer(self):
 		self.bufferBraille = []
 		self.bufferText = u""
 		self.cellsWithText.clear()
+		self.composedBraille = ""
+
+	def getComposedInput(self):
+		return "".join([0x2800 + unichr(cell) for cell in self.bufferBraille])
 
 	def sendChars(self, chars):
 		inputs = []
@@ -115,7 +134,7 @@ def formatDotNumbers(dots):
 			out.append(str(dot + 1))
 	return " ".join(out)
 
-def reportDots(dots):
+def speakDots(dots):
 	# Translators: Used when reporting braille dots to the user.
 	speech.speakMessage(_("dot") + " " + formatDotNumbers(dots))
 

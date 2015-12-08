@@ -11,6 +11,7 @@
 import itertools
 import weakref
 import unicodedata
+import time
 import colors
 import globalVars
 from logHandler import log
@@ -604,8 +605,12 @@ def speakSelectionChange(oldInfo,newInfo,speakSelected=True,speakUnselected=True
 				# Translators: Reported when selection is removed.
 				speakMessage(_("selection removed"))
 
+#: The number of typed characters for which to suppress speech
+#: and the time at which they were sent.
+#: Currently, this is only used when a word is inserted via contracted braille input.
+_suppressSpeakTypedCharacters = None
 def speakTypedCharacters(ch):
-	global curWordChars;
+	global curWordChars
 	typingIsProtected=api.isTypingProtected()
 	if typingIsProtected:
 		realChar="*"
@@ -626,7 +631,21 @@ def speakTypedCharacters(ch):
 			log.io("typed word: %s"%typedWord)
 		if config.conf["keyboard"]["speakTypedWords"] and not typingIsProtected:
 			speakText(typedWord)
-	if config.conf["keyboard"]["speakTypedCharacters"] and ord(ch)>=32:
+	global _suppressSpeakTypedCharacters
+	if _suppressSpeakTypedCharacters:
+		number, supTime = _suppressSpeakTypedCharacters
+		# We primarily suppress based on character count,
+		# but time out after a short while just in case.
+		timeOk = time.time() - supTime <= 0.1
+		suppress = number > 0 and timeOk
+		number -= 1
+		if number > 0 and timeOk:
+			_suppressSpeakTypedCharacters = (number, supTime)
+		else:
+			_suppressSpeakTypedCharacters = None
+	else:
+		suppress = False
+	if not suppress and config.conf["keyboard"]["speakTypedCharacters"] and ord(ch)>=32:
 		speakSpelling(realChar)
 
 class SpeakTextInfoState(object):

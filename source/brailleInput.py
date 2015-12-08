@@ -5,6 +5,7 @@
 #Copyright (C) 2012-2015 NV Access Limited, Rui Batista
 
 import os.path
+import time
 import louis
 import braille
 import config
@@ -65,8 +66,11 @@ class BrailleInputHandler(object):
 				data, mode=louis.dotsIO)[0]
 			newText = self.bufferText[oldTextLen:]
 			if newText:
+				if self.isContracted:
+					speech._suppressSpeakTypedCharacters = (len(newText), time.time())
+				else:
+					self.cellsWithText.add(len(self.bufferBraille) - 1)
 				self.sendChars(newText)
-				self.cellsWithText.add(len(self.bufferBraille) - 1)
 			elif config.conf["keyboard"]["speakTypedCharacters"]:
 				reportDots(dots)
 		elif config.conf["keyboard"]["speakTypedCharacters"]:

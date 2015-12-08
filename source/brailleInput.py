@@ -14,7 +14,6 @@ import winUser
 import inputCore
 import speech
 import keyboardHandler
-import inputCore
 
 """Framework for handling braille input from the user.
 All braille input is represented by a {BrailleInputGesture}.

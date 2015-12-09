@@ -39,7 +39,7 @@ class BrailleInputHandler(object):
 	"""
 
 	def __init__(self):
-		self.isContracted = True
+		self.isContracted = False
 		self.bufferBraille = []
 		self.bufferText = u""
 		#: Indexes of cells which produced text.
@@ -62,7 +62,7 @@ class BrailleInputHandler(object):
 		if not self.isContracted or dots == 0:
 			# Translate the buffer.
 			# liblouis requires us to set the highest bit for proper use of dotsIO.
-			data = u"".join([unichr(cell | 0x8000) for cell in self.bufferBraille])
+			data = u"".join([unichr(cell | 0x8000) for cell in self.bufferBraille[:pos + 1]])
 			self.bufferText = louis.backTranslate(
 				[os.path.join(braille.TABLES_DIR, config.conf["braille"]["inputTable"]),
 				"braille-patterns.cti"],
@@ -72,8 +72,8 @@ class BrailleInputHandler(object):
 				if self.isContracted:
 					speech._suppressSpeakTypedCharacters = (len(newText), time.time())
 				else:
-					self.cellsWithText.add(len(self.bufferBraille) - 1)
-				self.untranslatedBraille = ""
+					self.cellsWithText.add(pos)
+				self.untranslatedBraille = self.untranslatedBraille[self.untranslatedCursorPos:]
 				self.untranslatedStart = pos + 1
 				self.untranslatedCursorPos = 0
 				self.sendChars(newText)
@@ -83,7 +83,10 @@ class BrailleInputHandler(object):
 			self._reportUntranslated()
 
 		if dots == 0: # Space
-			self.flushBuffer()
+			del self.bufferBraille[:pos + 1]
+			self.bufferText = u""
+			self.cellsWithText.clear()
+			self.untranslatedStart = 0
 
 	def _reportUntranslated(self):
 		dots = self.bufferBraille[self.untranslatedStart + self.untranslatedCursorPos]
@@ -108,6 +111,18 @@ class BrailleInputHandler(object):
 		if index in self.cellsWithText:
 			inputCore.manager.emulateGesture(keyboardHandler.KeyboardInputGesture.fromName("backspace"))
 			self.cellsWithText.remove(index)
+			self.untranslatedStart -= 1
+			self.untranslatedCursorPos = 0
+			for prevIndex in xrange(index - 1, -1, -1):
+				if  prevIndex in self.cellsWithText:
+					# This cell produced text, so stop.
+					break
+				# This cell didn't produce text,
+				# so show this untranslated input to the user.
+				self.untranslatedStart = prevIndex
+				self.untranslatedCursorPos += 1
+			if self.untranslatedCursorPos > 0:
+				self.updateDisplay()
 		else:
 			# This cell didn't produce text.
 			speakDots(cell)

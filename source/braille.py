@@ -939,11 +939,15 @@ class TextInfoRegion(Region):
 		chunk.collapse()
 		chunk.setEndPoint(sel, "endToStart")
 		self._addTextWithFields(chunk, formatConfig)
-		# If the user is entering braille, place it before the selection.
+		# If the user is entering braille, place any untranslated braille before the selection.
 		import brailleInput
-		text = brailleInput.handler.composedBraille
+		text = brailleInput.handler.untranslatedBraille
 		if text:
+			rawInputStart = len(self.rawText)
 			self._addFieldText(text, None, separate=False)
+			rawInputEnd = len(self.rawText)
+		else:
+			rawInputStart = None
 		# Now, the selection itself.
 		self._addTextWithFields(sel, formatConfig, isSelection=True)
 		# Finally, get the chunk from the end of the selection to the end of the reading unit.
@@ -978,7 +982,30 @@ class TextInfoRegion(Region):
 		self.focusToHardLeft = self._isMultiline()
 		super(TextInfoRegion, self).update()
 
+		if self._selectionStart is not None:
+			# Mark the selection with dots 7 and 8.
+			if self._selectionEnd >= len(self.rawText):
+				brailleSelEnd = len(self.brailleCells)
+			else:
+				brailleSelEnd = self.rawToBraillePos[self._selectionEnd]
+			for pos in xrange(self.rawToBraillePos[self._selectionStart], brailleSelEnd):
+				self.brailleCells[pos] |= DOT7 | DOT8
+
+		if rawInputStart is not None:
+			self._brailleInputStart = self.rawToBraillePos[rawInputStart]
+			self._brailleInputEnd = self.rawToBraillePos[rawInputEnd]
+			self.brailleCursorPos = self._brailleInputStart + brailleInput.handler.untranslatedCursorPos
+		else:
+			self._brailleInputStart = None
+
 	def routeTo(self, braillePos):
+		if self._brailleInputStart is not None and self._brailleInputStart <= braillePos <= self._brailleInputEnd:
+			import brailleInput
+			brailleInput.handler.untranslatedCursorPos = braillePos - self._brailleInputStart
+			self.brailleCursorPos = self._brailleInputStart + brailleInput.handler.untranslatedCursorPos
+			brailleInput.handler._updateDisplay(onlyCursor=True)
+			return
+
 		if braillePos == self.brailleCursorPos:
 			# The cursor is already at this position,
 			# so activate the position.

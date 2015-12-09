@@ -39,14 +39,16 @@ class BrailleInputHandler(object):
 	"""
 
 	def __init__(self):
-		self.isContracted = False
+		self.isContracted = True
 		self.bufferBraille = []
 		self.bufferText = u""
 		#: Indexes of cells which produced text.
 		#: For example, this includes letters and numbers, but not number signs,
 		#: since a number sign by itself doesn't produce text.
 		self.cellsWithText = set()
-		self.composedBraille = ""
+		self.untranslatedBraille = ""
+		self.untranslatedStart = 0
+		self.untranslatedCursorPos = 0
 
 	def input(self, dots):
 		"""Handle one cell of braille input.
@@ -54,7 +56,8 @@ class BrailleInputHandler(object):
 		# Maintain a buffer so that state set by previous cells can be handled;
 		# e.g. capital and number signs.
 		oldTextLen = len(self.bufferText)
-		self.bufferBraille.append(dots)
+		pos = self.untranslatedStart + self.untranslatedCursorPos
+		self.bufferBraille.insert(pos, dots)
 
 		if not self.isContracted or dots == 0:
 			# Translate the buffer.
@@ -70,50 +73,54 @@ class BrailleInputHandler(object):
 					speech._suppressSpeakTypedCharacters = (len(newText), time.time())
 				else:
 					self.cellsWithText.add(len(self.bufferBraille) - 1)
-					self.composedBraille = ""
+				self.untranslatedBraille = ""
+				self.untranslatedStart = pos + 1
+				self.untranslatedCursorPos = 0
 				self.sendChars(newText)
 			else:
-				self._reportNonText(dots)
+				self._reportUntranslated()
 		else:
-			self._reportNonText(dots)
+			self._reportUntranslated()
 
 		if dots == 0: # Space
 			self.flushBuffer()
 
-	def _reportNonText(self, dots):
+	def _reportUntranslated(self):
+		dots = self.bufferBraille[self.untranslatedStart + self.untranslatedCursorPos]
 		if  config.conf["keyboard"]["speakTypedCharacters"]:
 			speakDots(dots)
-		self.composedBraille += unichr(0x2800 + dots)
-		self._updateComposed()
+		self.untranslatedCursorPos += 1
+		self._updateDisplay()
 
-	def _updateComposed(self):
+	def _updateDisplay(self, onlyCursor=False):
+		if not onlyCursor:
+			self.untranslatedBraille = "".join([unichr(0x2800 + dots) for dots in self.bufferBraille[self.untranslatedStart:]])
 		region = braille.handler.mainBuffer.regions[-1] if braille.handler.mainBuffer.regions else None
 		if isinstance(region, braille.TextInfoRegion):
 			braille.handler._doCursorMove(region)
 
 	def eraseLastCell(self):
-		if not self.bufferBraille:
+		index = self.untranslatedStart + self.untranslatedCursorPos - 1
+		if index < 0:
 			inputCore.manager.emulateGesture(keyboardHandler.KeyboardInputGesture.fromName("backspace"))
 			return
-		index = len(self.bufferBraille) - 1
-		cell = self.bufferBraille.pop()
+		cell = self.bufferBraille.pop(index)
 		if index in self.cellsWithText:
 			inputCore.manager.emulateGesture(keyboardHandler.KeyboardInputGesture.fromName("backspace"))
 			self.cellsWithText.remove(index)
 		else:
 			# This cell didn't produce text.
 			speakDots(cell)
-			self.composedBraille = self.composedBraille[:-1]
-			self._updateComposed()
+			self.untranslatedCursorPos -= 1
+			self._updateDisplay()
 
 	def flushBuffer(self):
 		self.bufferBraille = []
 		self.bufferText = u""
 		self.cellsWithText.clear()
-		self.composedBraille = ""
-
-	def getComposedInput(self):
-		return "".join([0x2800 + unichr(cell) for cell in self.bufferBraille])
+		self.untranslatedBraille = ""
+		self.untranslatedStart = 0
+		self.untranslatedCursorPos = 0
 
 	def sendChars(self, chars):
 		inputs = []

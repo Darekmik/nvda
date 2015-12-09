@@ -1003,7 +1003,7 @@ class TextInfoRegion(Region):
 			import brailleInput
 			brailleInput.handler.untranslatedCursorPos = braillePos - self._brailleInputStart
 			self.brailleCursorPos = self._brailleInputStart + brailleInput.handler.untranslatedCursorPos
-			brailleInput.handler._updateDisplay(onlyCursor=True)
+			brailleInput.handler.updateDisplay(onlyCursor=True)
 			return
 
 		if braillePos == self.brailleCursorPos:

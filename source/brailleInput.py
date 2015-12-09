@@ -90,9 +90,9 @@ class BrailleInputHandler(object):
 		if  config.conf["keyboard"]["speakTypedCharacters"]:
 			speakDots(dots)
 		self.untranslatedCursorPos += 1
-		self._updateDisplay()
+		self.updateDisplay()
 
-	def _updateDisplay(self, onlyCursor=False):
+	def updateDisplay(self, onlyCursor=False):
 		if not onlyCursor:
 			self.untranslatedBraille = "".join([unichr(0x2800 + dots) for dots in self.bufferBraille[self.untranslatedStart:]])
 		region = braille.handler.mainBuffer.regions[-1] if braille.handler.mainBuffer.regions else None
@@ -112,7 +112,7 @@ class BrailleInputHandler(object):
 			# This cell didn't produce text.
 			speakDots(cell)
 			self.untranslatedCursorPos -= 1
-			self._updateDisplay()
+			self.updateDisplay()
 
 	def flushBuffer(self):
 		self.bufferBraille = []

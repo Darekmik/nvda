@@ -1000,6 +1000,7 @@ class TextInfoRegion(Region):
 
 	def routeTo(self, braillePos):
 		if self._brailleInputStart is not None and self._brailleInputStart <= braillePos <= self._brailleInputEnd:
+			# The user is moving within untranslated braille input.
 			import brailleInput
 			brailleInput.handler.untranslatedCursorPos = braillePos - self._brailleInputStart
 			self.brailleCursorPos = self._brailleInputStart + brailleInput.handler.untranslatedCursorPos

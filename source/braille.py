@@ -982,15 +982,6 @@ class TextInfoRegion(Region):
 		self.focusToHardLeft = self._isMultiline()
 		super(TextInfoRegion, self).update()
 
-		if self._selectionStart is not None:
-			# Mark the selection with dots 7 and 8.
-			if self._selectionEnd >= len(self.rawText):
-				brailleSelEnd = len(self.brailleCells)
-			else:
-				brailleSelEnd = self.rawToBraillePos[self._selectionEnd]
-			for pos in xrange(self.rawToBraillePos[self._selectionStart], brailleSelEnd):
-				self.brailleCells[pos] |= DOT7 | DOT8
-
 		if rawInputStart is not None:
 			self._brailleInputStart = self.rawToBraillePos[rawInputStart]
 			self._brailleInputEnd = self.rawToBraillePos[rawInputEnd]
